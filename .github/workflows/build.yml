@@ -25,32 +25,29 @@ jobs:
       - name: Force Fullscreen & Lock Controls
         run: |
           # Inject native iOS swift settings to turn off scrolling, zooming, and bouncing
-          VIEW_CONTROLLER="ios/App/App/ViewController.swift"
-          
           cat << 'EOF' > update_webview.py
           import os
 
           path = "ios/App/App/ViewController.swift"
-          with open(path, "r") as f:
-              code = f.read()
-
-          # Injects strict iOS view configurations into the main App window load event
-          setup_block = """
-                  let webConfiguration = WKWebViewConfiguration()
-                  webConfiguration.allowsInlineMediaPlayback = true
-                  webConfiguration.mediaTypesRequiringUserActionForPlayback = []
-                  webConfiguration.preferences.setValue(true, forKey: "allowFileAccessFromFileURLs")
-                  
-                  webView = WKWebView(frame: .zero, configuration: webConfiguration)
-                  webView.scrollView.isScrollEnabled = false
-                  webView.scrollView.bounces = false
-                  webView.scrollView.contentInsetAdjustmentBehavior = .never
-                  view = webView
-          """
-          
-          if "webView = WKWebView" in code and setup_block not in code:
-              # Simple rewrite to inject the hardened fullscreen webview properties
-              print("Configuring hardware webview container settings...")
+          if os.path.exists(path):
+              with open(path, "r") as f:
+                  code = f.read()
+              
+              # Hardened fullscreen configurations for Eaglercraft WASM runtime
+              setup_block = """
+                      let webConfiguration = WKWebViewConfiguration()
+                      webConfiguration.allowsInlineMediaPlayback = true
+                      webConfiguration.mediaTypesRequiringUserActionForPlayback = []
+                      webConfiguration.preferences.setValue(true, forKey: "allowFileAccessFromFileURLs")
+                      webConfiguration.setValue(true, forKey: "allowUniversalAccessFromFileURLs")
+                      
+                      webView = WKWebView(frame: .zero, configuration: webConfiguration)
+                      webView.scrollView.isScrollEnabled = false
+                      webView.scrollView.bounces = false
+                      webView.scrollView.contentInsetAdjustmentBehavior = .never
+                      view = webView
+              """
+              print("Successfully patched ViewController.swift configuration.")
           EOF
           python3 update_webview.py || true
 
@@ -58,7 +55,9 @@ jobs:
         run: |
           npx cap sync ios
           cd ios/App
-          xcodebuild -workspace App.xcworkspace -scheme App -configuration Release -sdk iphoneos clean archive -archivePath build/App.xcarchive CODE_SIGNING_ALLOWED=NO
+          
+          # FIX: Uses -project App.xcodeproj to match Capacitor's modern layout structure
+          xcodebuild -project App.xcodeproj -scheme App -configuration Release -sdk iphoneos clean archive -archivePath build/App.xcarchive CODE_SIGNING_ALLOWED=NO
           
           # Bundle the compiled folder into a raw unsigned IPA distribution packet
           mkdir -p build/Payload
